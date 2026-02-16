@@ -1,37 +1,49 @@
 import { Server, Socket } from "socket.io";
 import type { Room } from "../types/room.js";
+import generateRoomId from "../utils/generateRoomId.js";
 
 const rooms: Record<string, Room> = {};
 
 interface CreateRoomPayload {
-  roomId: string;
+  playerId:string;
   name: string;
 }
 
 interface JoinRoomPayload {
   roomId: string;
   name: string;
+  playerId:string;
 }
 
 export default function roomHandler(io: Server, socket: Socket) {
   /* CREATE ROOM */
-  socket.on("create-room", ({ roomId, name }: CreateRoomPayload) => {
-    if (rooms[roomId]) {
-      socket.emit("room-error", "Room already exists");
-      return;
-    }
-
+  socket.on("create-room", ({ name,playerId }: CreateRoomPayload) => {    
+    const roomId = generateRoomId();
     rooms[roomId] = {
-      players: [{ id: socket.id, name, score: 0 }],
+      players: [], 
+      gameState: "waiting" 
     };
 
     socket.join(roomId);
+    
+    rooms[roomId].players.push({ 
+        id: playerId,
+        socketId:socket.id, 
+        name: name, 
+        score: 0,
+        isHost: true 
+    });
 
+    console.log(`Room created: ${roomId} by ${name}`);
+
+    socket.emit("room-created", { roomId });
+    
     io.to(roomId).emit("players-update", rooms[roomId].players);
   });
 
-  /* JOIN ROOM */
-  socket.on("join-room", ({ roomId, name }: JoinRoomPayload) => {
+  socket.on("join-room", ({ roomId, name,playerId }: JoinRoomPayload) => {
+    console.log(`Request to join join Room:${roomId} By ${playerId} - ${name}`);
+    
     const room = rooms[roomId];
 
     if (!room) {
@@ -40,10 +52,16 @@ export default function roomHandler(io: Server, socket: Socket) {
     }
 
     /* Prevent duplicate joins */
-    const alreadyInRoom = room.players.some((p) => p.id === socket.id);
-    if (alreadyInRoom) return;
+    const exiistingPlayer = room.players.find((p)=>p.id === playerId)
 
-    room.players.push({ id: socket.id, name, score: 0 });
+    if(exiistingPlayer){
+      exiistingPlayer.socketId = socket.id;
+      socket.join(roomId);
+      io.to(roomId).emit("players-updated",room.players);
+      return;
+    }
+
+    room.players.push({ id: playerId, name, score: 0, socketId: socket.id,isHost:false });
 
     socket.join(roomId);
 
@@ -53,7 +71,7 @@ export default function roomHandler(io: Server, socket: Socket) {
   /* DISCONNECT */
   socket.on("disconnect", () => {
     for (const [roomId, room] of Object.entries(rooms)) {
-      room.players = room.players.filter((p) => p.id !== socket.id);
+      room.players = room.players.filter((p) => p.socketId !== socket.id);
 
       if (room.players.length === 0) {
         delete rooms[roomId];
