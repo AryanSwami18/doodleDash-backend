@@ -6,7 +6,6 @@ import dotenv from 'dotenv';
 import roomHandler from './socket/roomHandler.js';
 
 
-
 dotenv.config();
 
 const app = express();
@@ -17,7 +16,7 @@ const server = http.createServer(app);
 
 const io = new Server(server, {
     cors: {
-        origin: "*",//  *******Important change later to frontend url*******
+        origin: "*",
         methods: ["GET", "POST"],
     },
 });
@@ -32,8 +31,6 @@ io.on("connection", (socket) => {
         console.log("user disconnected", socket.id);
     });
 });
-
-
 
 
 const PORT = process.env.PORT || 5000;

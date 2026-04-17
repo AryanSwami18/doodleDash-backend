@@ -9,4 +9,10 @@ export interface Player {
 export interface Room {
   players: Player[];
   gameState: "waiting" | "in-progress" | "finished";
+  rounds?: number | undefined;
+  currentRound?: number | undefined;
+  currentDrawerId?: string | undefined;
+  wordToDraw?: string | undefined;
+  guessedPlayers?: string[] | undefined;
+  roundEnding?: boolean;
 }
