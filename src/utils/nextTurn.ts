@@ -6,12 +6,15 @@ export default function nextTurn(io: Server, roomId: string) {
     const room = rooms[roomId];
     if (!room) return;
 
-    const currentDrawerIndex = room.players.findIndex(p => p.id === room.currentDrawerId);
+    const currentDrawerIndex = room.players.findIndex(
+        p => p.id === room.currentDrawerId
+    );
     if (currentDrawerIndex === -1) return;
 
-    const nextDrawerIndex = (currentDrawerIndex + 1) % room.players.length;
-    const nextDrawer = room.players[nextDrawerIndex];
+    const nextDrawerIndex =
+        (currentDrawerIndex + 1) % room.players.length;
 
+    const nextDrawer = room.players[nextDrawerIndex];
     if (!nextDrawer) return;
 
     if (room.players.length < 2) {
@@ -20,8 +23,34 @@ export default function nextTurn(io: Server, roomId: string) {
         return;
     }
 
-    room.currentDrawerId = nextDrawer.id;
-    room.currentRound = (room.currentRound || 0) + 1;
+    const isCycleComplete = nextDrawerIndex === 0;
 
+    if (isCycleComplete) {
+        const finishedRound = room.currentRound || 1;
+        const nextRound = finishedRound + 1;
+
+
+        io.to(roomId).emit("round-finished", {
+            round: finishedRound,
+            nextRound,
+            players: room.players
+        });
+
+ 
+        setTimeout(() => {
+            const updatedRoom = rooms[roomId];
+            if (!updatedRoom) return;
+
+            updatedRoom.currentDrawerId = nextDrawer.id;
+            updatedRoom.currentRound = nextRound;
+
+            startRound(io, roomId);
+        }, 4000);
+
+        return; 
+    }
+
+
+    room.currentDrawerId = nextDrawer.id;
     startRound(io, roomId);
 }

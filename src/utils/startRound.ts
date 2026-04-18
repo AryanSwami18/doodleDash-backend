@@ -7,10 +7,11 @@ export default function startRound(io: Server, roomId: string) {
 
   room.guessedPlayers = [];
 
-  // TEMP: static word
   room.wordToDraw = "apple";
 
+  io.to(roomId).emit("clear-canvas");
+
   io.to(roomId).emit("round-start", {
-    drawerId: room.currentDrawerId
+    drawerId: room.currentDrawerId,
   });
 }

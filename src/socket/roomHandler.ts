@@ -4,6 +4,7 @@ import generateRoomId from "../utils/generateRoomId.js";
 import { rooms } from "../store/roomStore.js";
 import tryStartGame from "../utils/tryStartGame.js";
 import endRound from "../utils/endRound.js";
+import restartGame from "../utils/restartGame.js";
 
 
 interface CreateRoomPayload {
@@ -20,6 +21,10 @@ interface JoinRoomPayload {
 interface SendMessagePayload {
   roomId: string;
   message: string;
+}
+
+interface RestartGamePayload {
+  roomId: string;
 }
 
 export default function roomHandler(io: Server, socket: Socket) {
@@ -49,30 +54,46 @@ export default function roomHandler(io: Server, socket: Socket) {
   });
 
   socket.on("join-room", ({ roomId, name, playerId }: JoinRoomPayload) => {
-    console.log(`Request to join join Room:${roomId} By ${playerId} - ${name}`);
+    console.log(`Join Room:${roomId} By ${playerId} - ${name}`);
 
     const room = rooms[roomId];
 
     if (!room) {
-      socket.emit("room-not-found");
+      socket.emit("room-not-found", {
+        message: "Room Not Found"
+      });
       return;
     }
 
-    /* Prevent duplicate joins */
-    const exiistingPlayer = room.players.find((p) => p.id === playerId)
+    let player = room.players.find(p => p.id === playerId);
 
-    if (exiistingPlayer) {
-      exiistingPlayer.socketId = socket.id;
-      socket.join(roomId);
-      io.to(roomId).emit("players-update", room.players);
-      return;
+    if (player) {
+      player.socketId = socket.id;
+    } else {
+      player = {
+        id: playerId,
+        name,
+        score: 0,
+        socketId: socket.id,
+        isHost: false
+      };
+
+      room.players.push(player);
     }
 
-    room.players.push({ id: playerId, name, score: 0, socketId: socket.id, isHost: false });
 
     socket.join(roomId);
 
-    io.to(roomId).emit("players-update", room.players);
+
+    socket.emit("joined-room", { roomId });
+    io.to(roomId).emit("players-update", {
+      players: room.players,
+      currentDrawerId: room.currentDrawerId
+    });
+    socket.emit("game-state", {
+      gameState: room.gameState,
+      currentDrawerId: room.currentDrawerId
+    });
     tryStartGame(io, roomId);
   });
 
@@ -82,9 +103,11 @@ export default function roomHandler(io: Server, socket: Socket) {
     if (!room) {
       socket.emit("room-not-found");
       return;
-    };
+    }
 
-    const player = room.players.find((p: { socketId: string; }) => p.socketId === socket.id);
+    const player = room.players.find(
+      (p: { socketId: string }) => p.socketId === socket.id
+    );
 
     if (!player) {
       socket.emit("not-in-room");
@@ -95,42 +118,90 @@ export default function roomHandler(io: Server, socket: Socket) {
     const correctWord = room.wordToDraw?.trim().toLowerCase();
     if (!correctWord) return;
 
-    if (player.id === room.currentDrawerId) {
-      socket.emit("message-error", "You can't send messages while drawing!");
+    const isDrawer = player.id === room.currentDrawerId;
+
+    if (isDrawer) {
+      if (normalizedMessage.includes(correctWord)) {
+        return;
+      }
+
+      io.to(roomId).emit("message-sent", {
+        player: player.name,
+        message
+      });
+
       return;
     }
 
     if (normalizedMessage === correctWord) {
       if (room.guessedPlayers.includes(player.id)) return;
+
       room.guessedPlayers.push(player.id);
       player.score += 10;
+
       io.to(roomId).emit("correct-guess", {
         playerName: player.name,
       });
 
-      const totalGuessers = room.players.length - 1;
+      io.to(roomId).emit("players-update", {
+        players: room.players,
+        currentDrawerId: room.currentDrawerId
+      });
 
-      if (room.guessedPlayers!.length === totalGuessers) {
+      const totalGuessers = room.players.filter(
+        (p: { id: any; }) => p.id !== room.currentDrawerId
+      ).length;;
+
+      if (room.guessedPlayers.length === totalGuessers) {
         endRound(io, roomId);
       }
+
       return;
     }
 
-
     io.to(roomId).emit("message-sent", {
       player: player.name,
-      message: message
+      message
     });
+  });
+
+
+  socket.on("restart-game", ({ roomId }: RestartGamePayload) => {
+    const room = rooms[roomId];
+    if (!room) {
+      return;
+    }
+
+    restartGame(room);
+    tryStartGame(io, roomId);
+  });
+
+
+  socket.on("draw", ({ roomId, ...data }) => {
+    const room = rooms[roomId];
+    if (!room) return;
+
+    const player = room.players.find(p => p.socketId === socket.id);
+    if (!player) return;
+
+    if (player.id !== room.currentDrawerId) return;
+
+    socket.to(roomId).emit("draw", data);
+  });
+  socket.on("clear-canvas", ({ roomId }) => {
+    socket.to(roomId).emit("clear-canvas");
   });
 
 
 
 
-  /* DISCONNECT */
+  //disconnect
   socket.on("disconnect", () => {
     for (const [roomId, room] of Object.entries(rooms)) {
 
       const leavingPlayer = room.players.find(p => p.socketId === socket.id);
+
+      if (!leavingPlayer) continue;
 
       room.players = room.players.filter(p => p.socketId !== socket.id);
 
@@ -152,7 +223,10 @@ export default function roomHandler(io: Server, socket: Socket) {
         endRound(io, roomId);
       }
 
-      io.to(roomId).emit("players-update", room.players);
+      io.to(roomId).emit("players-update", {
+        players: room.players,
+        currentDrawerId: room.currentDrawerId
+      });
     }
   });
 }

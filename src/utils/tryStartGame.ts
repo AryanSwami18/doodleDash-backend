@@ -16,6 +16,7 @@ export default function tryStartGame(io: Server, roomId: string) {
     room.gameState = "in-progress";
 
     room.currentRound = 1;
+    room.rounds = 5;
 
     const firstPlayer = room.players[0];
     if (!firstPlayer) return;
