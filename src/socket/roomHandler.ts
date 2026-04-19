@@ -136,8 +136,29 @@ export default function roomHandler(io: Server, socket: Socket) {
     if (normalizedMessage === correctWord) {
       if (room.guessedPlayers.includes(player.id)) return;
 
+      const isFirstGuess = room.guessedPlayers.length === 0;
+
       room.guessedPlayers.push(player.id);
-      player.score += 10;
+
+      if (isFirstGuess) {
+        player.score += 20;
+      }
+      const timeTaken = Date.now() - room.roundStartTime;
+
+      const maxPoints = 100;
+      const decayRate = 0.05; // tweak this
+
+      const points = Math.max(
+        20,
+        Math.floor(maxPoints - timeTaken * decayRate)
+      );
+
+      player.score += points;
+
+      const drawer = room.players.find((p: { id: any; }) => p.id === room.currentDrawerId);
+      if (drawer) {
+        drawer.score += Math.floor(points * 0.1); 
+      }
 
       io.to(roomId).emit("correct-guess", {
         playerName: player.name,
@@ -153,6 +174,7 @@ export default function roomHandler(io: Server, socket: Socket) {
       ).length;;
 
       if (room.guessedPlayers.length === totalGuessers) {
+        console.log("ENDING ROUND");
         endRound(io, roomId);
       }
 
@@ -171,7 +193,7 @@ export default function roomHandler(io: Server, socket: Socket) {
     if (!room) {
       return;
     }
-
+    io.to(roomId).emit("game-restarted");
     restartGame(room);
     tryStartGame(io, roomId);
   });

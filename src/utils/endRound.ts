@@ -10,9 +10,14 @@ export default function endRound(io: Server, roomId: string) {
 
     room.roundEnding = true;
 
+    console.log("ROUND END TRIGGERED", roomId);
+
     io.to(roomId).emit("round-end",{
         word:room.wordToDraw
     });
+
+    
+    
 
 
     setTimeout(()=>{

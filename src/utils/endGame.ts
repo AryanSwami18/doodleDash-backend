@@ -17,6 +17,4 @@ export default function endGame(io:Server,roomId:string){
 
 
     console.log(`Game ended in room ${roomId}`);
-    
-    
 }

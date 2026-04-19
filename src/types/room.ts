@@ -15,4 +15,5 @@ export interface Room {
   wordToDraw?: string | undefined;
   guessedPlayers?: string[] | undefined;
   roundEnding?: boolean;
+  roundStartTime?: number | undefined;
 }
