@@ -16,7 +16,7 @@ const server = http.createServer(app);
 
 const io = new Server(server, {
     cors: {
-        origin: "*",
+        origin: "doodle-dash-frontend-3ef7.vercel.app",
         methods: ["GET", "POST"],
     },
 });
